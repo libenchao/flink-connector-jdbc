@@ -99,8 +99,9 @@ public class JdbcTablePlanTest extends TableTestBase {
     }
 
     /**
-     * Note the join condition is not present in the optimized plan, as it is handled in the JDBC
-     * java code, where it adds the join conditions to the select statement string.
+     * Note the join condition is not present in the optimized plan, see FLINK-34170, as it is
+     * handled in the JDBC java code, where it adds the join conditions to the select statement
+     * string.
      */
     @Test
     public void testLookupJoin() {

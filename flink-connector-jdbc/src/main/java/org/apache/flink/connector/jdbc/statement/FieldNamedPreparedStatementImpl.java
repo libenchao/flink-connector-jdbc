@@ -18,8 +18,6 @@
 
 package org.apache.flink.connector.jdbc.statement;
 
-import org.apache.flink.annotation.VisibleForTesting;
-
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Date;
@@ -42,8 +40,7 @@ public class FieldNamedPreparedStatementImpl implements FieldNamedPreparedStatem
     private final PreparedStatement statement;
     private final int[][] indexMapping;
 
-    @VisibleForTesting
-    public FieldNamedPreparedStatementImpl(PreparedStatement statement, int[][] indexMapping) {
+    private FieldNamedPreparedStatementImpl(PreparedStatement statement, int[][] indexMapping) {
         this.statement = statement;
         this.indexMapping = indexMapping;
     }
@@ -191,14 +188,17 @@ public class FieldNamedPreparedStatementImpl implements FieldNamedPreparedStatem
         checkNotNull(sql, "sql must not be null.");
         checkNotNull(fieldNames, "fieldNames must not be null.");
 
+        if (sql.contains("?")) {
+            throw new IllegalArgumentException("SQL statement must not contain ? character.");
+        }
         sql = sql + additionalPredicates;
 
         HashMap<String, List<Integer>> parameterMap = new HashMap<>();
         String parsedSQL = parseNamedStatement(sql, parameterMap);
 
         // currently, the statements must contain all the field parameters
-        int parameterMapSize = parameterMap.size();
-        int fieldNamesLength = fieldNames.length;
+        final int parameterMapSize = parameterMap.size();
+        final int fieldNamesLength = fieldNames.length;
         checkArgument(
                 parameterMapSize == fieldNamesLength,
                 "Expected "

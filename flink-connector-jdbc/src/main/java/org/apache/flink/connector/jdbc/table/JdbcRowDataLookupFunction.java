@@ -46,6 +46,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -57,15 +58,15 @@ public class JdbcRowDataLookupFunction extends LookupFunction {
     private static final Logger LOG = LoggerFactory.getLogger(JdbcRowDataLookupFunction.class);
     private static final long serialVersionUID = 2L;
 
-    private String query;
+    private final String query;
     private final JdbcConnectionProvider connectionProvider;
-    private String[] keyNames;
+    private final String[] keyNames;
     private final int maxRetryTimes;
     private final JdbcRowConverter jdbcRowConverter;
     private final JdbcRowConverter lookupKeyRowConverter;
 
-    private List<String> resolvedPredicates = new ArrayList<>();
-    private Serializable[] pushdownParams = new Serializable[0];
+    private final List<String> resolvedPredicates;
+    private final Serializable[] pushdownParams;
 
     private transient FieldNamedPreparedStatement statement;
 
@@ -82,6 +83,8 @@ public class JdbcRowDataLookupFunction extends LookupFunction {
         checkNotNull(fieldNames, "No fieldNames supplied.");
         checkNotNull(fieldTypes, "No fieldTypes supplied.");
         checkNotNull(keyNames, "No keyNames supplied.");
+        checkNotNull(resolvedPredicates, "No resolvedPredicates supplied.");
+        checkNotNull(pushdownParams, "No pushdownParams supplied.");
         this.connectionProvider = new SimpleJdbcConnectionProvider(options);
         this.keyNames = keyNames;
         List<String> nameList = Arrays.asList(fieldNames);
@@ -124,7 +127,7 @@ public class JdbcRowDataLookupFunction extends LookupFunction {
         }
     }
 
-    protected FieldNamedPreparedStatement setPredicateParams(FieldNamedPreparedStatement statement)
+    private FieldNamedPreparedStatement setPredicateParams(FieldNamedPreparedStatement statement)
             throws SQLException {
         for (int i = 0; i < pushdownParams.length; ++i) {
             statement.setObject(i + keyNames.length, pushdownParams[i]);
@@ -186,8 +189,16 @@ public class JdbcRowDataLookupFunction extends LookupFunction {
     private void establishConnectionAndStatement() throws SQLException, ClassNotFoundException {
         Connection dbConn = connectionProvider.getOrEstablishConnection();
         String additionalPredicates = "";
-        if (resolvedPredicates.size() > 0) {
-            additionalPredicates = " AND " + String.join(" AND ", resolvedPredicates);
+        if (!resolvedPredicates.isEmpty()) {
+            String joinedConditions =
+                    resolvedPredicates.stream()
+                            .map(pred -> String.format("(%s)", pred))
+                            .collect(Collectors.joining(" AND "));
+            if (keyNames.length == 0) {
+                additionalPredicates = " WHERE " + joinedConditions;
+            } else {
+                additionalPredicates = " AND " + joinedConditions;
+            }
         }
         statement =
                 FieldNamedPreparedStatement.prepareStatement(
